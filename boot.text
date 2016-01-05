@@ -26,7 +26,7 @@
 	.IF	TEK
 QWIK	; Assume p-code at 2000H, move to high core
 	LD	HL,(2006H)	; Get code length (bytes)
-	EX	DE,HL	
+	EX	DE,HL
 	LD	HL,(MEMTOP)	; Get maximum memory address
 	SUBHLDE			; Get address to transfer program to
 	LD	SP,HL		; Stack grows from here
@@ -85,13 +85,13 @@ SYSTLE	.BYTE	0DH		;length byte of String
 NOSYSMSG .ASCII "SYSTEM.PASCAL is not on bootstrap disk.  "
 	.ASCII	"Bootstrap aborted."
 L_NSMSG .EQU	$-NOSYSMSG	; LENGTH OF MESSAGE
-	
+
 DENTSZ	.EQU	1AH		;directory entry size, bytes
 DTITLE	.EQU	06H		;offset of title in an entry
 DENTP	.WORD	0		;gets set by this Step
 
-SYSBLK	.WORD	0  
-SEGCNT	.BYTE	0  
+SYSBLK	.WORD	0
+SEGCNT	.BYTE	0
 
 ;  Begin the bootstrap.
 ;
@@ -103,7 +103,7 @@ SEGCNT	.BYTE	0
 BOOT	;Start here and follow the yellow brick road.
 
 	LD	SP,RELSEG+1000H ; Set temporary SP
- 
+
 	LD	A,0FEH		; MAKE BYTE ADDRESS INTO WORD ADDRESS
 	AND	L
 	LD	L,A
@@ -112,13 +112,13 @@ BOOT	;Start here and follow the yellow brick road.
 	LD	A,4		; convert to UCSD unit number
 	ADD	A,B
 	LD	(SYSUNT),A	;  becomes the system unit number
-	
+
 	;   Step 1
 ;Initialize all I/O drivers, size memory, and do any other
 ;  machine-specific stuff needed.
-	
+
 	CALL	IOINIT
-	
+
 	.IF CML			; until we update COMPAL files
 	 LD	A,0C3H		; set up keyboard interrupt vecto
 	 LD	(38H),A
@@ -128,7 +128,7 @@ BOOT	;Start here and follow the yellow brick road.
 
 
 ;   Step 2
-;read directory from abs block 2 into 
+;read directory from abs block 2 into
 ;memory just above the interp
 ;find system.pascal and leave the
 ;address of its direntry in DENTP
@@ -158,10 +158,10 @@ $20	;outer, loop on each dir entry
 $30	;inner, loop on characters
 	LD	A,(DE)
 	CP	(HL)
-	JP	NZ,$40	
+	JP	NZ,$40
 	INC	DE
 	INC	HL
-	DJNZM	$30  
+	DJNZM	$30
 	JP	FOUND
 $40	; No match here - go to next dir entry
 	LD	HL,(DENTP)
@@ -169,7 +169,7 @@ $40	; No match here - go to next dir entry
 	ADD	HL,DE
 	LD	(DENTP),HL
 	DEC	C
-	JP	NZ,$20	
+	JP	NZ,$20
 ;
 ;  We did not find SYSTEM.PASCAL in the directory, so put out an error message
 ;  and hang.
@@ -177,7 +177,7 @@ $40	; No match here - go to next dir entry
 	LD	HL,NOSYSMSG	; DISPLAY ERROR MESSAGE
 	LD	BC,L_NSMSG
 	MTRREQ	M_DSPTXT
-	
+
 $45	JR	$45		; HANG FOREVER
 
 
@@ -189,7 +189,7 @@ FOUND	;adrs left in DENTP
 ;   Step 3
 ;RELSEG .EQU	NRPTOP+800H	;address to read block 0 at, above dir
 ;SYSBLK .WORD	0		;amount to make rel seg blk nos absolute
-;SEGCNT .BYTE	0  
+;SEGCNT .BYTE	0
 
 	;do the read
 	LD	HL,(SYSUNT)	;unit
@@ -252,12 +252,12 @@ $50	LD	A,(SYSUNT)	;set SEGTBL.UNIT := 4
 	LD	A,(SEGCNT)	;do this 16 times
 	DEC	A
 	LD	(SEGCNT),A
-	JP	NZ,$50	
+	JP	NZ,$50
 
 
 
 ;   Step 4
-; read segment zero, pointed at by SEGTBL[0], 
+; read segment zero, pointed at by SEGTBL[0],
 ;into the highest memory address possible, up
 ;to MAXADR. Also set SP at bottom of code read in.
 
@@ -296,7 +296,7 @@ $60	LD	(HL),A
 	LD	(INTSEGT),HL
 	LD	HL,(MEMTOP)
 	LD	(INTSEGT+2),HL
-	
+
 
 ;   Step 5
 ; Initialize all P-machine registers including
@@ -368,7 +368,7 @@ NRPTOP	.EQU	$
 RELSEG	.EQU	NRPTOP+800H
 FSTENT	.EQU	NRPTOP+DENTSZ
 	.END	GOLOC		;you learn to pray.
-	
+
 ; End of file BOOT, and end of interpreter !
 
-	
+
