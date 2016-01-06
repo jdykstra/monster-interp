@@ -16,7 +16,7 @@ ROM	.EQU	2000H		; address definition for interpreter code
 MAXADR	.EQU	0D7FEH		; highest possible memory byte
 RAM	.EQU	0		; address of interpreter variables (Not
 				; yet meaningful
-IOSIZE	.EQU	20.
+IOSIZE	.EQU	22.
 
 Z80	.EQU	ON	       ; CPU type and particular model
 CPM	.EQU	ON 

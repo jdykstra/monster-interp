@@ -123,6 +123,7 @@ URTN	.EQU	UASY+2		;
 BLKPNT	.EQU   URTN+2		; POINTER TO REQUEST BLOCK
 SECCNT	.EQU	BLKPNT+2	; COUNT OF FULL SECTORS TO MOVE
 REMLEN	.EQU   SECCNT + 2	; COUNT OF LENGTH REMAINING
+SECSZ	.EQU	REMLEN+2	;disk sector size
 
 ; Character stream IO temporaries
 CLAST	.EQU	URTN+2
@@ -356,6 +357,19 @@ DSK0	LD	(BLKPNT),IX
 	LD	HL,(ULEN)		; COPY LENGTH INTO REMLEN
 	LD	(REMLEN),HL
 
+	LD	A,(IX+C_DRQFMT)		; IDENTIFY DISK FORMAT
+	BIT	4,A
+	JR	NZ,$01			; Jump if optimized format
+
+	AND	A			; Assume IDE format is zero
+	JR	Z,$01			; Jump if IDE
+
+	LD	HL,L_SMSEC		; Remember small sector size
+	JR	$02
+
+$01	LD	HL,L_BGSEC		; Remember large sector size
+$02	LD	(SECSZ),HL
+
 	LD	A,(UASY)
 	AND	DSKBIT		; direct disk accessing ?
 	JP	Z,DSKGO
@@ -364,6 +378,8 @@ DSK0	LD	(BLKPNT),IX
 ;
 ; interpret block # as an absolute sector number, decode it,
 ;   and send out request
+;
+;  ?? This doesn't handle IDE yet.
 ;
 	LD	HL,(UBLK)
 	LD	BC,26.
@@ -388,11 +404,22 @@ $09	PUSH	IX			; PUT BLK POINTER IN HL
 	MTRREQ	M_DSKWRT
 	JP	XDSK
 
-DSKGO	;Start initializing for the loop
-	LD	HL,(REMLEN)
-	BIT	4,(IX+C_DRQFMT)		; IDENTIFY DISK FORMAT
+;
+; Start initializing for the loop
+; Put size of fractional sector in REMLEN, and count of
+; full sectors into SECCNT.
+;
+DSKGO	LD	HL,(REMLEN)		; COUNT OF BYTES LEFT
+	LD	A,(IX+C_DRQFMT)		; IDENTIFY DISK FORMAT
+	BIT	4,A
 	JR	NZ,$13			; JUMP IF OPTIMIZED FORMAT
 
+	AND	A			; ASSUME FMTIDE is zero
+	JR	Z,$13			; JUMP IF IDE
+
+;
+;  Sector size is 128 bytes.
+;
 	LD	A,7FH		; ISOLATE FRACTIONAL SECTOR BYTE COUNT
 	AND	L
 	LD	(REMLEN),A	  ; STORE FRACTION IN REMLEN
@@ -402,11 +429,9 @@ DSKGO	;Start initializing for the loop
 	ADD	HL,HL		; COMPUTE SECTOR COUNT IN H
 	JR	$14		; GO STORE SECTOR COUNT
 
-
-
-
-;  COMPUTE SECTOR COUNT AND FRACTIONAL SECTOR BYTE COUNT FOR
-;  OPTIMIZED DISK FORMAT.
+;
+;  COMPUTE FULL SECTOR COUNT AND FRACTIONAL SECTOR BYTE COUNT FOR
+;  OPTIMIZED DISK FORMAT.  Sector size is 512 bytes.
 ;
 $13	LD	A,1H			; COMPUTE FRACTIONAL BYTE COUNT
 	AND	H
@@ -425,10 +450,10 @@ $14
 
 	LD	A,(IX+C_DRQFMT)		; IDENTIFY DISK FORMAT
 	AND	A
-	JR	NZ,$15			; JUMP IF NOT IDE (512-BYTE SECTORS)
+	JR	NZ,$15			; JUMP IF NOT IDE
 
-	LD	HL,(UBLK)	; GET THE REQUESTED BLOCK #
-	LD	(IX+C_DRQTRK),L	; STORE IN REQUEST BLOCK
+	LD	HL,(UBLK)		; GET THE REQUESTED BLOCK #
+	LD	(IX+C_DRQTRK),L		; STORE IN REQUEST BLOCK
 	LD	(IX+C_DRQTRK+1),H
 	JR	$50
 
@@ -440,54 +465,68 @@ $15	LD	HL,(UBLK)	; GET THE REQUESTED BLOCK #
 	POP	HL
 	MTRREQ	M_DSKADR	; TRANSLATE DISK ADDRESS
 	LD	IX,(BLKPNT)	; RESTORE REQ BLK POINTER
-
-$50			;--------LOOP ON SECTORS, Gross Control, Kludge.
-	LD	A,(SECCNT)
+;
+;  Top of per-sector loop.
+;
+$50	LD	A,(SECCNT)
 	DEC	A
 	LD	(SECCNT),A
 	JP	NZ,$80		; JUMP IF AT LEAST ONE FULL SECTOR TO GO
 
+;
+;  Fractional sector special-casing.
+;  Jump if we just read or wrote the fractional sector (last of tranfer).
+;
 	LD	HL,(REMLEN)	  ; CHECK FOR FRACTIONAL SECTOR
 	BIT	7,H
 	JR	NZ,$60		; JUMP IF JUST TRANSFERED A PARTIAL
 
+;
+;  Jump if there's a fractional sector yet to do.
+;
 	LD	A,H		; CHECK FOR A PARTIAL YET TO DO
 	OR	L
 	JP	Z,XDSK		; EXIT IF ALL DONE
+
+;
+;  Set up for a fractional sector read or write.
+;
 
 	LD	A,1		; PREVENT SECTOR COUNT FROM GOING NEGATIVE
 	LD	(SECCNT),A
 
 	SET	7,H		; REMEMBER WE'VE BEEN THRU HERE
-	LD	(REMLEN),HL
+	LD	(REMLEN),HL	; Save remainder count plus flag bit
+
 	LD	A,(UREQ)	;do whole sector anyway on output
 	AND	OUTBIT
-	JP	NZ,$80
+	JP	NZ,$80		; Jump on write
 
-	LD	HL,-L_BGSEC	   ;fractional read, oh shoot.
+;
+;  Allocate a buffer on the stack for the fractional sector read.
+;
+	LD	HL,-L_BGSEC	; Big sector buffer also enough for small
 	ADD	HL,SP
 	LD	SP,HL
 	LD	(IX+C_DRQADR),L ; SET BUFFER ADDRESS
 	LD	(IX+C_DRQADR+1),H
 	JP	$80		; GO DO THE READ
 
-$60	LD	A,(UREQ)	;what happened to the fraction?
+;
+;  Come here after doing fractional read or write of last sector.
+;
+$60	LD	A,(UREQ)	; Get request code
 	AND	OUTBIT
-	JP	NZ,XDSK		;lots to do if read though
+	JP	NZ,XDSK		; Exit if doing a write
 
 	LD	B,H		; MOVE COUNT TO BC
 	LD	C,L
 	RES	7,B		; CLEAR OUR FLAG BIT
 	LD	HL,(UBUF)
-	BIT	4,(IX+C_DRQFMT)
-	JR	NZ,$77		; JUMP IF OPTIMIZED FORMAT
 
-	LD	DE,-L_SMSEC
-	JR	$78
-
-$77	LD	DE,-L_BGSEC
-
-$78	ADD	HL,DE		; COMPENSATE FOR EXTRA BUMP BEFORE
+	LD	DE,(SECSZ)	; Sector size
+	AND	A		; Make sure C flag is clear
+	SBC	HL,DE		; COMPENSATE FOR EXTRA BUMP BEFORE
 	EX	DE,HL
 	LD	HL,0000H
 	ADD	HL,SP
@@ -496,8 +535,11 @@ $78	ADD	HL,DE		; COMPENSATE FOR EXTRA BUMP BEFORE
 	LD	HL,L_BGSEC	   ; TAKE THE TEMP BUFFER OFF THE STACK
 	ADD	HL,SP
 	LD	SP,HL
-	JP	XDSK
+	JP	XDSK		; And exit
 
+;
+;  Here to read or write a full or fractional sector.
+;
 $80	LD	A,(UREQ)	;now finally do the I/O request
 	AND	OUTBIT
 	JP	Z,$90
@@ -565,24 +607,17 @@ $105	LD	HL,(ULEN)	; RESET LENGTH
 	LD	(REMLEN),HL
 	JP	DSKGO
 
-
-
-
-$110	LD	HL,(UBUF)
-	BIT	4,(IX+C_DRQFMT)		; CHECK DISK FORMAT TYPE
-	JR	NZ,$111			; JUMP IF OPTIMIZED FORMAT
-
-	LD	DE,L_SMSEC
-	JR	$112
-
-
-$111	LD	DE,L_BGSEC		; LARGE SECTOR SIZE
-$112	ADD	HL,DE
+;
+;  Here after a successful sector read or write.
+;
+$110	LD	HL,(UBUF)	; Advance buffer pointer
+	LD	DE,(SECSZ)
+	ADD	HL,DE
 	LD	(UBUF),HL
 	LD	(IX+C_DRQADR),L		; UPDATE MEMORY ADR IN REQ BLK
 	LD	(IX+C_DRQADR+1),H
 
-	JP	$50	;--------KEEP ON TRUCKIN'.
+	JP	$50			; Loop for next sector
 
 XDSK	JP	IOXIT
 
