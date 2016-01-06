@@ -483,8 +483,12 @@ $60	LD	A,(UREQ)	;what happened to the fraction?
 	LD	C,L
 	RES	7,B		; CLEAR OUR FLAG BIT
 	LD	HL,(UBUF)
-	BIT	4,(IX+C_DRQFMT)
+	LD	A,(IX+C_DRQFMT)
+	BIT	4,A
 	JR	NZ,$77		; JUMP IF OPTIMIZED FORMAT
+
+	AND	A
+	JR	Z,$77
 
 	LD	DE,-L_SMSEC
 	JR	$78
