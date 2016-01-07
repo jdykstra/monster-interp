@@ -4,6 +4,10 @@
 	 .LIST
 	.ENDC
 
+	DEF_CH
+
+
+
 ;Copyright (c) 1978
 ;  by the Regents of the University of California, San Diego
 ;
@@ -104,12 +108,14 @@ BOOT	;Start here and follow the yellow brick road.
 
 	LD	SP,RELSEG+1000H ; Set temporary SP
 
+	PROGRESS "Q"
+
 	LD	A,0FEH		; MAKE BYTE ADDRESS INTO WORD ADDRESS
 	AND	L
 	LD	L,A
 	LD	(MEMTOP),HL	; remember the top of memory
 
-	LD	A,4		; convert to UCSD unit number
+	LD	A,7		; convert to UCSD unit number    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ADD	A,B
 	LD	(SYSUNT),A	;  becomes the system unit number
 
@@ -118,6 +124,7 @@ BOOT	;Start here and follow the yellow brick road.
 ;  machine-specific stuff needed.
 
 	CALL	IOINIT
+	PROGRESS "R"
 
 	.IF CML			; until we update COMPAL files
 	 LD	A,0C3H		; set up keyboard interrupt vecto
@@ -151,6 +158,7 @@ BOOT	;Start here and follow the yellow brick road.
 	LD	C,00H
 ;		;(DENTP)=^DIR ENTRY, HL=^DIR.TITLE, DE=^SYSTITLE, C=counter
 $20	;outer, loop on each dir entry
+	PROGRESS "S"
 	LD	DE,DTITLE	;inc HL to .TITLE in entry
 	ADD	HL,DE
 	LD	DE,SYSTLE	;set DE to title for comparison
@@ -192,6 +200,7 @@ FOUND	;adrs left in DENTP
 ;SEGCNT .BYTE	0
 
 	;do the read
+	PROGRESS "T"
 	LD	HL,(SYSUNT)	;unit
 	PUSH	HL
 	LD	HL,RELSEG	;buffer
@@ -217,6 +226,7 @@ FOUND	;adrs left in DENTP
 ;					UNIT, device index
 ;					BLOCK, absolute
 ;					LENGTH same as above
+	PROGRESS "U"
 	LD	A,10H		;loop control
 	LD	(SEGCNT),A
 	LD	DE,SEGTBL
@@ -261,6 +271,7 @@ $50	LD	A,(SYSUNT)	;set SEGTBL.UNIT := 4
 ;into the highest memory address possible, up
 ;to MAXADR. Also set SP at bottom of code read in.
 
+	PROGRESS "V"
 	LD	HL,SEGTBL+04H	;get len of seg zero
 	LD	E,(HL)
 	INC	HL
@@ -283,6 +294,7 @@ $50	LD	A,(SYSUNT)	;set SEGTBL.UNIT := 4
 	CALL	SYSRD
 
 ; Fill in internal seg table
+	PROGRESS "W"
 	LD	HL,INTSEGT+4
 	LD	BC,-<MAXSEG*4>
 	CLRA
@@ -359,14 +371,136 @@ STEP5	LD	(SEGP),HL
 ;   Step 6
 ; enable interrupts and do other junky stuff
 
+	PROGRESS "X"
+
 	RESTORE
 
+	.PAGE
+;*        SUBROUTINE SHOWPROG - DISPLAY A PROGRESS INDICATOR
+;
+;  OUTPUT A SINGLE CHARACTER, FOLLOWED BY <CR><LF>.
+;
+;         ENTRY - PARAMETER IN C REGISTER.
+;
+;         EXIT - ALL REGISTERS PRESERVED.
+;
+	.IF	DEBUG
+SHOWPROG
+        PUSH    IX              ; SAVE ALL USER REGISTERS
+        PUSH    IY
+        PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        PUSH    AF
 
+        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
+	LD	C,CH_CR
+        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
+	LD	C,CH_LF
+        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
+
+        MTRREQ	M_KBCHAR	; WAIT FOR USER
+
+        POP     AF              ; RESTORE USER REGISTERS
+        POP     BC
+        POP     DE
+        POP     HL
+        POP     IY
+        POP     IX
+
+	RET
+	.PAGE
+
+;*        SUBROUTINE HEXOUT - WRITE OUT ONE BYTE IN HEX
+;
+;  TRANSLATE THE PARAMETER BYTE INTO TWO HEXIDECIMAL
+;  CHARACTERS, AND WRITE THEM TO THE USER.
+;
+;         ENTRY - PARAMETER IN A REGISTER.
+;
+;         EXIT - A REGISTER DESTROYED.
+;                ALL OTHERS PRESERVED.
+;
+
+HEXOUT
+        PUSH    AF              ; SAVE PARAMETER FOR LATER
+        SRL     A               ; RIGHT-JUSTIFY TOP DIGIT
+        SRL     A
+        SRL     A
+        SRL     A
+        CP      10.             ; IS IT NUMERIC
+        JR      C,HEXOUTA       ; YES.  JUMP
+        ADD     A,7             ; BOOST NUMBER
+HEXOUTA
+        ADD     A,"0"           ; MAKE INTO  ASCII
+        CALL    OUTPUTCH        ; WRITE TOP NIBBLE
+
+        POP     AF              ; GET BACK NUMBER
+        AND     0FH             ; SAVE LOW DIGIT
+        CP      10.             ; IT IS NUMERIC
+        JR      C,HEXOUTB       ; YES.  JUMP
+        ADD     A,7             ; BOOST NUMBER
+HEXOUTB
+        ADD     A,"0"           ; MAKE INTO ASCII
+        CALL    OUTPUTCH        ; WRITE OUT BOTTOM DIGIT
+
+        RET     	        ; AND  RETURN TO CALLER
+        .PAGE
+;*        SUBROUTINE TXTOUT - WRITE TEXT BLOCK TO USER
+;
+;  TRANSFER A TEXT STRING TERMINATED BY AN ETX CHARACTER TO
+;  THE USER.
+;
+;         ENTRY - ADDRESS OF FIRST CHARACTER OF STRING IN HL
+;
+;         EXIT - HL POINTS TO ETX CHARACTER.
+;                A CONTAINS -CH.ETX-
+;                ALL OTHER REGISTERS ARE PRESERVED.
+;
+TXTOUT
+        LD      A,(HL)          ; GET NEXT CHARACTER IN TEXT
+        CP      CH_ETX          ; IS IT END-OF-TEXT
+        RET     Z               ; RETURN IF IT IS END-OF-TEXT
+
+        CALL    OUTPUTCH        ; WRITE OUT CHARACTER
+        INC     HL              ; BUMP TEXT POINTER
+        JR      TXTOUT          ; AND LOOP FOR NEXT CHARACTER
+        .PAGE
+;*        SUBROUTINE OUTPUTCH
+;
+;  WRITE ONE CHARACTER FROM REGISTER A TO THE
+;  DISPLAY.
+;
+;         ENTRY - CHARACTER IN A
+;
+;         EXIT - ALL REGISTERS PRESERVED
+;
+OUTPUTCH
+        PUSH    IX              ; SAVE ALL USER REGISTERS
+        PUSH    IY
+        PUSH    HL
+        PUSH    DE
+        PUSH    BC
+        PUSH    AF
+
+        LD      C,A             ; MOVE CHARACTER TO C REGISTER
+        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
+
+        POP     AF              ; RESTORE USER REGISTERS
+        POP     BC
+        POP     DE
+        POP     HL
+        POP     IY
+        POP     IX
+
+        RET
+	.ENDC
 
 
 NRPTOP	.EQU	$
 RELSEG	.EQU	NRPTOP+800H
 FSTENT	.EQU	NRPTOP+DENTSZ
+
 	.END	GOLOC		;you learn to pray.
 
 ; End of file BOOT, and end of interpreter !

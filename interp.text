@@ -44,6 +44,18 @@
 	.ELSE
 	 .LIST
 	.ENDC
+DEBUG	.EQU	ON
+
+	.IF	DEBUG
+	.MACRO PROGRESS
+	LD	C,%1
+	CALL	SHOWPROG
+	.ENDM
+	.ELSE
+	.MACRO PROGRESS
+	.ENDM
+	.ENDC
+
 
 ;****************** MACRO DEFINITIONS *******************;
 

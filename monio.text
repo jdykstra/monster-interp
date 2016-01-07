@@ -296,6 +296,7 @@ UWRITE	LD	A,OUTBIT
 UREAD	LD	A,INBIT
 UIO	LD	HL,BACK1
 SYSIO	LD	(UREQ),A
+	PROGRESS "#"
 	LD	(URTN),HL
 	POP	HL	; junk async param
 	LD	(UASY),HL
@@ -323,6 +324,7 @@ CALLIO	INC	HL	; get driver adrs from table
 $10	EX	DE,HL
 	JP	(HL)	; GO FOR IT ||
 IOXIT	LD	HL,(URTN)
+	PROGRESS "-"
 	JP	(HL)	; Be see'n you.
 
 
@@ -350,6 +352,7 @@ DRVR12 LD	IX,DRQBLK12		; REQUEST BLOCK FOR UNIT 12
 					; FALLTHROUGH
 
 DSK0	LD	(BLKPNT),IX
+	PROGRESS "2"
 	LD	A,(UREQ)
 	AND	CLRBIT
 	JP	NZ,XDSK			; IGNORE CLEAR REQUEST
@@ -381,6 +384,7 @@ $02	LD	(SECSZ),HL
 ;
 ;  ?? This doesn't handle IDE yet.
 ;
+	PROGRESS "3"
 	LD	HL,(UBLK)
 	LD	BC,26.
 	CALL	DIVPOS
@@ -410,6 +414,7 @@ $09	PUSH	IX			; PUT BLK POINTER IN HL
 ; full sectors into SECCNT.
 ;
 DSKGO	LD	HL,(REMLEN)		; COUNT OF BYTES LEFT
+	PROGRESS "4"
 	LD	A,(IX+C_DRQFMT)		; IDENTIFY DISK FORMAT
 	BIT	4,A
 	JR	NZ,$13			; JUMP IF OPTIMIZED FORMAT
@@ -436,6 +441,7 @@ DSKGO	LD	HL,(REMLEN)		; COUNT OF BYTES LEFT
 $13	LD	A,1H			; COMPUTE FRACTIONAL BYTE COUNT
 	AND	H
 	LD	(REMLEN+1),A		  ; PUT COUNT IN REMLEN
+	PROGRESS "5"
 
 	SRL	H			; COMPUTE SECTOR COUNT IN H
 
@@ -452,6 +458,7 @@ $14
 	AND	A
 	JR	NZ,$15			; JUMP IF NOT IDE
 
+	PROGRESS "a"
 	LD	HL,(UBLK)		; GET THE REQUESTED BLOCK #
 	LD	(IX+C_DRQTRK),L		; STORE IN REQUEST BLOCK
 	LD	(IX+C_DRQTRK+1),H
@@ -468,7 +475,8 @@ $15	LD	HL,(UBLK)	; GET THE REQUESTED BLOCK #
 ;
 ;  Top of per-sector loop.
 ;
-$50	LD	A,(SECCNT)
+$50	PROGRESS "b"
+	LD	A,(SECCNT)
 	DEC	A
 	LD	(SECCNT),A
 	JP	NZ,$80		; JUMP IF AT LEAST ONE FULL SECTOR TO GO
@@ -477,6 +485,7 @@ $50	LD	A,(SECCNT)
 ;  Fractional sector special-casing.
 ;  Jump if we just read or wrote the fractional sector (last of tranfer).
 ;
+	PROGRESS "c"
 	LD	HL,(REMLEN)	  ; CHECK FOR FRACTIONAL SECTOR
 	BIT	7,H
 	JR	NZ,$60		; JUMP IF JUST TRANSFERED A PARTIAL
@@ -484,6 +493,7 @@ $50	LD	A,(SECCNT)
 ;
 ;  Jump if there's a fractional sector yet to do.
 ;
+	PROGRESS "6"
 	LD	A,H		; CHECK FOR A PARTIAL YET TO DO
 	OR	L
 	JP	Z,XDSK		; EXIT IF ALL DONE
@@ -510,6 +520,7 @@ $50	LD	A,(SECCNT)
 	LD	SP,HL
 	LD	(IX+C_DRQADR),L ; SET BUFFER ADDRESS
 	LD	(IX+C_DRQADR+1),H
+	PROGRESS "7"
 	JP	$80		; GO DO THE READ
 
 ;
@@ -540,7 +551,8 @@ $60	LD	A,(UREQ)	; Get request code
 ;
 ;  Here to read or write a full or fractional sector.
 ;
-$80	LD	A,(UREQ)	;now finally do the I/O request
+$80	PROGRESS "8"
+	LD	A,(UREQ)	;now finally do the I/O request
 	AND	OUTBIT
 	JP	Z,$90
 
@@ -551,6 +563,7 @@ $90	LD	A,M_DSKRD	 ; READ MONITOR REQUEST
 $100	PUSH	IX		; PUT REQ BLK ADR IN HL
 	POP	HL
 	MTRREQ
+	PROGRESS "z"
 	LD	IX,(BLKPNT)	; RESTORE REQ BLK POINTER
 
 	AND	A		;test for I/O errors from MONITOR
@@ -619,7 +632,8 @@ $110	LD	HL,(UBUF)	; Advance buffer pointer
 
 	JP	$50			; Loop for next sector
 
-XDSK	JP	IOXIT
+XDSK	PROGRESS "9"
+	JP	IOXIT
 
 
 
