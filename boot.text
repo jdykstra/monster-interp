@@ -4,8 +4,6 @@
 	 .LIST
 	.ENDC
 
-	DEF_CH
-
 
 
 ;Copyright (c) 1978
@@ -23,46 +21,6 @@
 
 
 ;****************BOOTSTRAP LOADERS****************;
-
-;    The special TEK bootstrap, which is for files that include both
-;	the interpreter and the P-code program to execute.
-
-	.IF	TEK
-QWIK	; Assume p-code at 2000H, move to high core
-	LD	HL,(2006H)	; Get code length (bytes)
-	EX	DE,HL
-	LD	HL,(MEMTOP)	; Get maximum memory address
-	SUBHLDE			; Get address to transfer program to
-	LD	SP,HL		; Stack grows from here
-	LD	DE,2200H	; Address of start of p-code
-	LD	BC,(2006H)	; Set byte counter to # of bytes to transfer
-	CLRA			; Get
-	SUB	C		;  negative
-	LD	C,A		;   byte
-	LD	A,00H		;    count
-	SBC	A,B		  ;
-	LD	B,A
-
-$10	LD	A,(DE)		; Get byte to transfer
-	LD	(HL),A		; Move byte to new home
-	INC	DE		; Bump address
-	INC	HL		; Bump destination address
-	INC	C		; Increment lower part of byte count
-	JP	NZ,$10		; Overflow into upper byte ?
-	INC	B		; Yes, increment upper one, too
-	JP	NZ,$10		; Are we done (BC=0) ?
-	DEC	HL		; Yes, adjust HL for
-	DEC	HL		;  STEP5 of booter
-	JP	STEP5		; COWABUNGA !!!!!
-	.ENDC
-
-;    The complex bootstrap.  So termed not because it is complex, but
-;	because the primary booter that read in the interpreter also
-;	initialized the P-machine, in a like manner to the booter below
-
-CBOOT	POP	HL		; get UCSD bios location...
-	LD	(BIOSJP),HL	; ...save it in a fixed place...
-	JP	BACK1		; ...and start interpreting
 
 
 ;    The standard booter.  For primary booters that simply read in the interp
@@ -90,6 +48,9 @@ NOSYSMSG .ASCII "SYSTEM.PASCAL is not on bootstrap disk.  "
 	.ASCII	"Bootstrap aborted."
 L_NSMSG .EQU	$-NOSYSMSG	; LENGTH OF MESSAGE
 
+IOERRMSG .ASCII "I/O error "
+L_IOMSG .EQU	$-IOERRMSG	; LENGTH OF MESSAGE
+
 DENTSZ	.EQU	1AH		;directory entry size, bytes
 DTITLE	.EQU	06H		;offset of title in an entry
 DENTP	.WORD	0		;gets set by this Step
@@ -115,9 +76,13 @@ BOOT	;Start here and follow the yellow brick road.
 	LD	L,A
 	LD	(MEMTOP),HL	; remember the top of memory
 
-	LD	A,7		; convert to UCSD unit number    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ADD	A,B
-	LD	(SYSUNT),A	;  becomes the system unit number
+	LD	A,B		; convert to UCSD unit number
+	ADD	A,4
+	CP	5+1
+	JR	C,$10
+
+	ADD	A,3
+$10	LD	(SYSUNT),A	;  becomes the system unit number
 
 	;   Step 1
 ;Initialize all I/O drivers, size memory, and do any other
@@ -143,6 +108,12 @@ BOOT	;Start here and follow the yellow brick road.
 ;	read in the directory
 	LD	HL,(SYSUNT)	;unit number for booting
 	PUSH	HL
+	.IF	DEBUG
+	LD	A,H
+	CALL	HEXOUT
+	LD	A,L
+	CALL	HEXOUT
+	.ENDC
 	LD	HL,NRPTOP	;I/O buffer, way out there
 	PUSH	HL
 	LD	HL,0
@@ -152,6 +123,7 @@ BOOT	;Start here and follow the yellow brick road.
 	LD	HL,02H		;DIR starts at block 2
 	PUSH	HL
 	CALL	SYSRD		; that does it folks
+	CALL	CHKIOR		; Check for error
 ;	search dir
 	LD	HL,FSTENT	 ;skip over entry 0, disk name
 	LD	(DENTP),HL
@@ -188,9 +160,30 @@ $40	; No match here - go to next dir entry
 
 $45	JR	$45		; HANG FOREVER
 
+;
+;  Check for I/O error passed back through IORSLT.
+;
+CHKIOR	LD	HL,(IORSLT)
+	LD	A,L
+	OR	H
+	RET	Z
+;
+;  Disk I/O error encountered.  Display a message and hang.
+;
+	LD	HL,IOERRMSG	; DISPLAY ERROR MESSAGE
+	LD	BC,L_IOMSG
+	MTRREQ	M_DSPTXT
 
+	.IF	DEBUG
+	LD	HL,(IORSLT)
+	LD	A,H
+	CALL	HEXOUT
+	LD	A,L
+	CALL	HEXOUT
+	.ENDC
 
-FOUND	;adrs left in DENTP
+$10	JR	$10
+
 
 
 
@@ -199,6 +192,7 @@ FOUND	;adrs left in DENTP
 ;SYSBLK .WORD	0		;amount to make rel seg blk nos absolute
 ;SEGCNT .BYTE	0
 
+FOUND	;adrs left in DENTP
 	;do the read
 	PROGRESS "T"
 	LD	HL,(SYSUNT)	;unit
@@ -218,6 +212,7 @@ FOUND	;adrs left in DENTP
 	LD	H,B
 	LD	(SYSBLK),HL
 	CALL	SYSRD
+	CALL	CHKIOR		; Check for error
 	;put stuff into SEGTBL
 ;			HL => RELSEG: array [0..15] of
 ;					DISKADR, relative block number
@@ -375,128 +370,7 @@ STEP5	LD	(SEGP),HL
 
 	RESTORE
 
-	.PAGE
-;*        SUBROUTINE SHOWPROG - DISPLAY A PROGRESS INDICATOR
-;
-;  OUTPUT A SINGLE CHARACTER, FOLLOWED BY <CR><LF>.
-;
-;         ENTRY - PARAMETER IN C REGISTER.
-;
-;         EXIT - ALL REGISTERS PRESERVED.
-;
-	.IF	DEBUG
-SHOWPROG
-        PUSH    IX              ; SAVE ALL USER REGISTERS
-        PUSH    IY
-        PUSH    HL
-        PUSH    DE
-        PUSH    BC
-        PUSH    AF
-
-        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
-	LD	C,CH_CR
-        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
-	LD	C,CH_LF
-        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
-
-        MTRREQ	M_KBCHAR	; WAIT FOR USER
-
-        POP     AF              ; RESTORE USER REGISTERS
-        POP     BC
-        POP     DE
-        POP     HL
-        POP     IY
-        POP     IX
-
-	RET
-	.PAGE
-
-;*        SUBROUTINE HEXOUT - WRITE OUT ONE BYTE IN HEX
-;
-;  TRANSLATE THE PARAMETER BYTE INTO TWO HEXIDECIMAL
-;  CHARACTERS, AND WRITE THEM TO THE USER.
-;
-;         ENTRY - PARAMETER IN A REGISTER.
-;
-;         EXIT - A REGISTER DESTROYED.
-;                ALL OTHERS PRESERVED.
-;
-
-HEXOUT
-        PUSH    AF              ; SAVE PARAMETER FOR LATER
-        SRL     A               ; RIGHT-JUSTIFY TOP DIGIT
-        SRL     A
-        SRL     A
-        SRL     A
-        CP      10.             ; IS IT NUMERIC
-        JR      C,HEXOUTA       ; YES.  JUMP
-        ADD     A,7             ; BOOST NUMBER
-HEXOUTA
-        ADD     A,"0"           ; MAKE INTO  ASCII
-        CALL    OUTPUTCH        ; WRITE TOP NIBBLE
-
-        POP     AF              ; GET BACK NUMBER
-        AND     0FH             ; SAVE LOW DIGIT
-        CP      10.             ; IT IS NUMERIC
-        JR      C,HEXOUTB       ; YES.  JUMP
-        ADD     A,7             ; BOOST NUMBER
-HEXOUTB
-        ADD     A,"0"           ; MAKE INTO ASCII
-        CALL    OUTPUTCH        ; WRITE OUT BOTTOM DIGIT
-
-        RET     	        ; AND  RETURN TO CALLER
-        .PAGE
-;*        SUBROUTINE TXTOUT - WRITE TEXT BLOCK TO USER
-;
-;  TRANSFER A TEXT STRING TERMINATED BY AN ETX CHARACTER TO
-;  THE USER.
-;
-;         ENTRY - ADDRESS OF FIRST CHARACTER OF STRING IN HL
-;
-;         EXIT - HL POINTS TO ETX CHARACTER.
-;                A CONTAINS -CH.ETX-
-;                ALL OTHER REGISTERS ARE PRESERVED.
-;
-TXTOUT
-        LD      A,(HL)          ; GET NEXT CHARACTER IN TEXT
-        CP      CH_ETX          ; IS IT END-OF-TEXT
-        RET     Z               ; RETURN IF IT IS END-OF-TEXT
-
-        CALL    OUTPUTCH        ; WRITE OUT CHARACTER
-        INC     HL              ; BUMP TEXT POINTER
-        JR      TXTOUT          ; AND LOOP FOR NEXT CHARACTER
-        .PAGE
-;*        SUBROUTINE OUTPUTCH
-;
-;  WRITE ONE CHARACTER FROM REGISTER A TO THE
-;  DISPLAY.
-;
-;         ENTRY - CHARACTER IN A
-;
-;         EXIT - ALL REGISTERS PRESERVED
-;
-OUTPUTCH
-        PUSH    IX              ; SAVE ALL USER REGISTERS
-        PUSH    IY
-        PUSH    HL
-        PUSH    DE
-        PUSH    BC
-        PUSH    AF
-
-        LD      C,A             ; MOVE CHARACTER TO C REGISTER
-        MTRREQ  M_DSPCHR        ; DISPLAY CHARACTER
-
-        POP     AF              ; RESTORE USER REGISTERS
-        POP     BC
-        POP     DE
-        POP     HL
-        POP     IY
-        POP     IX
-
-        RET
-	.ENDC
-
-
+	.ALIGN	2
 NRPTOP	.EQU	$
 RELSEG	.EQU	NRPTOP+800H
 FSTENT	.EQU	NRPTOP+DENTSZ

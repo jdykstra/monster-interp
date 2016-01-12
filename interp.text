@@ -44,17 +44,19 @@
 	.ELSE
 	 .LIST
 	.ENDC
-DEBUG	.EQU	ON
 
-	.IF	DEBUG
+	.IF	0
 	.MACRO PROGRESS
 	LD	C,%1
 	CALL	SHOWPROG
 	.ENDM
+
 	.ELSE
 	.MACRO PROGRESS
 	.ENDM
 	.ENDC
+
+	DEF_CH
 
 
 ;****************** MACRO DEFINITIONS *******************;
@@ -279,7 +281,7 @@ GOLOC	JP	BOOT		; Jump to Pascal-level booter (entry point
 	.IF ~NMS
 BIOSJP	.WORD	0		; Vector to the BIOS jump table
 	.BLOCK	11.
-	
+
 	.ELSE
 
 ;Stuff for Northwest Micro disk densities
@@ -308,7 +310,7 @@ FMTD1	.BYTE	0
 	JP	FPFRND
 	JP	FPFPOT
 	.BLOCK	3
-	
+
 
 
 ;********* INTERPRETER CONSTANTS AND VARIBLES **********;
@@ -327,10 +329,10 @@ MPD0	.WORD	0		; ^local var with offset of zero
 BASED0	.WORD	0		; ^global var with offset of zero
 IPCSAV	.WORD	0		; save IPC on complex ops, and for XEQERR
 FPERROR .WORD	0		; fp error status
-RETADR	.WORD	0  
-NEWSP	.WORD	0  
+RETADR	.WORD	0
+NEWSP	.WORD	0
 LTSTRNG .BYTE	01H		; char to string conversion
-	.BYTE	0  
+	.BYTE	0
 
 ; Internal segment table, contains refcounts and addr of each seg
 	.ALIGN	2		; table must be on a word boundary
@@ -338,18 +340,18 @@ INTSEGT .BLOCK	<MAXSEG+1>*4
 
 ; General use reusable temporaries
 WORD1	.WORD	0
-WORD2	.WORD	0  
-WORD3	.WORD	0  
-WORD4	.WORD	0  
+WORD2	.WORD	0
+WORD3	.WORD	0
+WORD4	.WORD	0
 BLOCK1	.BLOCK	08H
-BYTE1	.WORD	0  
+BYTE1	.WORD	0
 
 ; Transcendental fp temporaries
 TFPT	.BLOCK	26.
 
 ; Procedure temporaries
 TPROC	.BLOCK	20.
- 
+
 ; IO temporaries
 TIO	.BLOCK	IOSIZE
 
@@ -358,25 +360,25 @@ TIO	.BLOCK	IOSIZE
 
 	.ALIGN	 2
 SYSCOM	; Interpreter and pascalsystem communication area
-IORSLT	.WORD	0  
-XERRCD	.WORD	0  
+IORSLT	.WORD	0
+XERRCD	.WORD	0
 SYSUNT	.WORD	04H
-BUGSTA	.WORD	0  
+BUGSTA	.WORD	0
 GDIRP	.WORD	NIL
-BOMBP	.WORD	0  
-BASE	.WORD	0  
-MP	.WORD	0  
-JTAB	.WORD	0  
-SEGP	.WORD	0  
+BOMBP	.WORD	0
+BASE	.WORD	0
+MP	.WORD	0
+JTAB	.WORD	0
+SEGP	.WORD	0
 MEMTOP	.WORD	MAXADR		; we hope
-BOMIPC	.WORD	0  
-HLTLINE .WORD	0  
+BOMIPC	.WORD	0
+HLTLINE .WORD	0
 BRKPTS	.BLOCK	2*4
 RETRIES .WORD	0
 PBLKARY .WORD	DSKARRAY	;POINTER TO DISK ARRAY
 	.BLOCK	2*8
-LOTIME	.WORD	0  
-HITIME	.WORD	0  
+LOTIME	.WORD	0
+HITIME	.WORD	0
 MSCNFO	.WORD	0000H		; has xy addressing, has lowercase
 CRTTYP	.WORD	0000H
 CRTCTL	; output to CONSOLE:
@@ -407,11 +409,23 @@ STOP	.BYTE	13H		; ^S
 	.BLOCK	06H		; expansion
 SEGTBL	.BLOCK	2*3*<MAXSEG+1>
 
+	.IF	P_TRACE
+SP_MSG	.ASCII	"SP="
+	.BYTE	CH_ETX
 
+IC_MSG	.ASCII	" IC="
+	.BYTE	CH_ETX
 
- 
+OP_MSG	.ASCII	" OP="
+	.BYTE	CH_ETX
+	.ENDC
+
+CRLF	.BYTE	CH_CR
+	.BYTE	CH_LF
+	.BYTE	CH_ETX
+
 ;********************** I - FETCH ***********************;
-     
+
 BACK1	GETIPC
 	JP	BACK
 
@@ -421,7 +435,37 @@ SLDCI	; Short load constant word
 	LD	H,00H
 	PUSH	HL
 
-BACK	LD	A,(BC)		; get opcode
+BACK
+	.IF	P_TRACE
+	LD	HL,SP_MSG
+	CALL	TXTOUT
+
+	LD	HL,0
+	ADD	HL,SP
+	LD	A,H
+	CALL	HEXOUT
+	LD	A,L
+	CALL 	HEXOUT
+
+	LD	HL,IC_MSG
+	CALL	TXTOUT
+
+	LD	A,B
+	CALL	HEXOUT
+	LD	A,C
+	CALL	HEXOUT
+
+	LD	HL,OP_MSG
+	CALL	TXTOUT
+
+	LD	A,(BC)
+	CALL	HEXOUT
+
+	LD	HL,CRLF
+	CALL	TXTOUT
+	.ENDC
+
+	LD	A,(BC)		; get opcode
 	INC	BC		; increment IPC
 	ADD	A,A
 	JP	NC,SLDCI	; if bit 7 zero push constant
@@ -438,7 +482,7 @@ BACK	LD	A,(BC)		; get opcode
 
 
 ;**************** RUN-TIME ERROR SUPPORT ****************;
-  
+
 XEQERR	; a run-time error has occured. pass some parameters
 	;   through syscom, then do a CXP 0,2 (PROCEDURE execerror)
 	LD	H,00H		; HL = error #
@@ -461,7 +505,7 @@ NOEXIT	LD	L,03H		; Exitting procedure never called
 	JP	XEQERR
 STKOVR	LD	HL,INTEND	; stack overflow
 	LD	(NP),HL		; prevent recursive overflow
-	LD	L,04H	
+	LD	L,04H
 	JP	XEQERR
 INTOVR	LD	L,05H		; Integer overflow
 	JP	XEQERR
@@ -487,7 +531,7 @@ HLT	SAVIPC			; Unconditional halt
 	JP	XEQERR
 BPTHLT	LD	L,0FH		; Conditional halt or breakpoint
 	JP	XEQERR
-  
+
 
 BPT	; Conditional halt or breakpoint
 	CALL	GBDE

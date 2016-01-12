@@ -19,7 +19,7 @@ RAM	.EQU	0		; address of interpreter variables (Not
 IOSIZE	.EQU	22.
 
 Z80	.EQU	ON	       ; CPU type and particular model
-CPM	.EQU	ON 
+CPM	.EQU	ON
 DDT	.EQU	OFF
 TEK	.EQU	OFF
 CML	.EQU	OFF
@@ -27,39 +27,44 @@ NMS	.EQU	OFF
 
 ; Listing controls
 
-LISTINC .EQU	ON	; List include file
+LISTINC .EQU	OFF	; List include file
 LSTINT	.EQU	ON	 ; Interpreter main root section
-LSTVARS .EQU	ON	; Variable loading, storing, moving, indexing
-LSTARIT .EQU	ON	; Simple top-of-stack arithmetic and comparisons
-LSTSET	.EQU	ON	; Set arithmetic and comparisons
-LSTFP	.EQU	ON	; Basic floating point stuff
-LSTFPT	.EQU	ON	; Transendental floating point routines
-LSTPROC .EQU	ON	; Procedure calling, returning, segment loading,
+LSTVARS .EQU	OFF	; Variable loading, storing, moving, indexing
+LSTARIT .EQU	OFF	; Simple top-of-stack arithmetic and comparisons
+LSTSET	.EQU	OFF	; Set arithmetic and comparisons
+LSTFP	.EQU	OFF	; Basic floating point stuff
+LSTFPT	.EQU	OFF	; Transendental floating point routines
+LSTPROC .EQU	OFF	; Procedure calling, returning, segment loading,
 			 ;   unloading, relocation, and jumps
-LSTSTP	.EQU	ON	; Standard procedure caller and misc. standard procs.
+LSTSTP	.EQU	OFF	; Standard procedure caller and misc. standard procs.
 LSTIO	.EQU	ON	; Unit io and BIOS callers
 LSTBOOT .EQU	ON	; Pascal-level bootstrap
-	
+
+;  Debugging options
+
+DEBUG	.EQU	OFF
+P_TRACE	.EQU	OFF	; Trace individual P-code instructions
+
 	.INCLUDE	*:ASMINC.TEXT
-	
+
 	.INCLUDE	INTERP.TEXT
 	.INCLUDE	VARS.TEXT
 	.INCLUDE	ARITH.TEXT
 	.INCLUDE	SET1.TEXT
 	.INCLUDE	SET2.TEXT
-	
+
 	;  .INCLUDE	   FPL.TEXT
 	;  .INCLUDE	   FPI.TEXT
 	.INCLUDE	NOFPI.TEXT
-	
+
 	;.INCLUDE	FPT.TEXT
 	.INCLUDE	NOFPT.TEXT
-	
+
 	.INCLUDE	PROC1.TEXT
 	.INCLUDE	PROC2.TEXT
 	.INCLUDE	STP.TEXT
 	.INCLUDE	MONIO.TEXT
 	.INCLUDE	BOOT.TEXT
-	
+
 	.END
 
