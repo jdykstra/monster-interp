@@ -48,7 +48,7 @@ NOSYSMSG .ASCII "SYSTEM.PASCAL is not on bootstrap disk.  "
 	.ASCII	"Bootstrap aborted."
 L_NSMSG .EQU	$-NOSYSMSG	; LENGTH OF MESSAGE
 
-IOERRMSG .ASCII "I/O error "
+IOERRMSG .ASCII "I/O error in interpreter boot "
 L_IOMSG .EQU	$-IOERRMSG	; LENGTH OF MESSAGE
 
 DENTSZ	.EQU	1AH		;directory entry size, bytes
