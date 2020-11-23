@@ -1,0 +1,28 @@
+OS and INTERP both contain copies of the interpreter source.  However, the INTERP files contain more of my modifications than the OS copies.  Those modifications include support for the printer serial port, the tick clock, and printing an error message if SYSTEM.PASCAL can't be found during boot.  OS also contains CPMINC.TEXT and CPMIO.TEXT, which I didn't use on my system.
+
+FWIW, the files in INTERP have lines delimited by <CR>/<LF>, while the ones in OS just have the (UNIX-style) <LF> delimiters.  INTERP files also have tabs expanded.
+
+Note however that some of the interpreter source files are missing from INTERP, because I got floppy disk errors while trying to download them.  Missing files include FPI.TEXT, SET1.TEXT and STP.TEXT.  FPL.TEXT also seems to be missing and FPT.TEXT is truncated.
+
+The INTERP copy of FPINC.TEXT excludes the floating point support;  the OS copy enables it.  Only OS contains a copy of the FPI.TEXT floating point source code.
+
+PROC1.TEXT contains my code for setting breakpoints from the debugger, dated 20 Feb 83.
+
+The top-level include file for the interpreter is MONINC.TEXT.
+
+The disk translation program for the emulated environment is warning that there are unprintable characters in STP.TEXT and FPT.TEXT.  They assemble OK, though.
+
+I compared my working copy of the interpreter against the BitSavers's copy, and the only differences are my modifications.       
+
+
+Disk I/O
+--------
+There's a sector length word added to the end of the monitor disk request blocks.  Supposedly that field is used by the interpreter as well as Pascal code that references the request blocks.  However, the code at DSK0 assumes sector length based on whether the "optimized" disk format is in use.
+
+The block number passed by Pascal code is in 128-byte blocks.  Fractional block reads are implemented by the interpreter using a temporary buffer on the stack; writes are always full sectors.
+
+The block number passed to M_DSKADR is in 512-byte blocks.  It fills in the track and sector fields of the request block.  Those fields always contains physical track and sector numbers.
+
+The interpreter does a separate monitor read or write call for each physical disk sector.  The disk controlware advances the physical disk address to the next logical sector, and the disk driver in the monitor copies the updated address to the request block.  The interpreter takes care of updating the buffer address.
+
+IF a "density mismatch" error is returned by the I/O monitor request, the interpreter swaps disk type and sector length fields in the request block, and restarts the operation from the beginning.

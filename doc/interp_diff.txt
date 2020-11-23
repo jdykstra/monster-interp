@@ -1,0 +1,220 @@
+Only in /Users/jdykstra/em_disk_images/interp: .git
+Only in /Users/jdykstra/em_disk_images/interp: README.TEXT
+diff -urbB z80_p-code_source/boot.text /Users/jdykstra/em_disk_images/interp/boot.text
+--- z80_p-code_source/boot.text	2006-05-11 00:13:36.000000000 -0500
++++ /Users/jdykstra/em_disk_images/interp/boot.text	2016-01-05 14:08:10.000000000 -0600
+@@ -6,6 +6,14 @@
+ 
+ ;Copyright (c) 1978
+ ;  by the Regents of the University of California, San Diego
++;
++;  The following modifications have been made by John Dykstra:
++;
++;	30 Dec 84 - Display a message if there is no SYSTEM.PASCAL on the
++;		    bootstrap disk.
++;	05-Apr-82 - Accept byte pointer to top of memory
++;	12-Dec-81 - Interface to standard bootstrap
++;
+ 
+ ; Beginning of file BOOT
+ 
+@@ -73,6 +81,11 @@
+ 	; These declarations are for Step 2.
+ SYSTLE  .BYTE   0DH             ;length byte of String
+ 	.ASCII  "SYSTEM.PASCAL" ;characters of String
++
++NOSYSMSG .ASCII "SYSTEM.PASCAL is not on bootstrap disk.  "
++	.ASCII	"Bootstrap aborted."
++L_NSMSG .EQU	$-NOSYSMSG	; LENGTH OF MESSAGE
++
+ DENTSZ  .EQU    1AH             ;directory entry size, bytes
+ DTITLE  .EQU    06H             ;offset of title in an entry
+ DENTP   .WORD   0               ;gets set by this Step
+@@ -80,9 +93,25 @@
+ SYSBLK  .WORD   0  
+ SEGCNT  .BYTE   0  
+ 
++;  Begin the bootstrap.
++;
++;  We enter here through the jump located just after the opcode dispatch
++;  table at the beginning of the interpreter.  On entry, HL contains
++;  a pointer to the top available byte in read/write memory, and
++;  A contains the number of the bootstrap unit.
+ 
+ BOOT    ;Start here and follow the yellow brick road.
+-	LD      SP,RELSEG+1000H         ;if that doesn't do it I'll be
++
++	LD	SP,RELSEG+1000H ; Set temporary SP
++
++	LD	A,0FEH		; MAKE BYTE ADDRESS INTO WORD ADDRESS
++	AND	L
++	LD	L,A
++	LD	(MEMTOP),HL	; remember the top of memory
++
++	LD	A,4		; convert to UCSD unit number
++	ADD	A,B
++	LD	(SYSUNT),A	;  becomes the system unit number
+ 
+ 	;   Step 1
+ ;Initialize all I/O drivers, size memory, and do any other
+@@ -134,15 +163,25 @@
+ 	INC     HL
+ 	DJNZM   $30  
+ 	JP      FOUND
+-$40     ; No match here - go to next dir entÿy
++$40	; No match here - go to next dir entry
+ 	LD      HL,(DENTP)
+ 	LD      DE,DENTSZ
+ 	ADD     HL,DE
+ 	LD      (DENTP),HL
+ 	DEC     C
+ 	JP      NZ,$20  
+-$45     JP      $45             ; We didn't find it.  Maybe one of this days
+-				;   we'll put out an error message here.
++;
++;  We did not find SYSTEM.PASCAL in the directory, so put out an error message
++;  and hang.
++;
++	LD	HL,NOSYSMSG	; DISPLAY ERROR MESSAGE
++	LD	BC,L_NSMSG
++	MTRREQ	M_DSPTXT
++
++$45	JR	$45		; HANG FOREVER
++
++
++
+ FOUND   ;adrs left in DENTP
+ 
+ 
+Only in z80_p-code_source/: cpminc.text
+Only in z80_p-code_source/: cpmio.text
+Only in /Users/jdykstra/em_disk_images/interp: fpinc.text
+diff -urbB z80_p-code_source/interp.text /Users/jdykstra/em_disk_images/interp/interp.text
+--- z80_p-code_source/interp.text	2006-05-11 00:13:36.000000000 -0500
++++ /Users/jdykstra/em_disk_images/interp/interp.text	2015-11-22 16:00:47.000000000 -0600
+@@ -31,6 +31,13 @@
+ ;    19-Jan-79  JJM     II.0 byte addressing modifications
+ ;     5-Feb-79  JJM     II.0 CPMIO direct disk, special char disenabling
+ ;     8-Feb-79  JJM     Log, ln bug fixed
++;
++;  Modifications by John Dykstra:
++;
++;    22-Jan-82	Add disk array pointer to syscom
++;
++;  Also see the individual include files.
++;
+ 
+ 	.IF ~LSTINT
+ 	 .NOLIST
+@@ -354,7 +361,8 @@
+ HLTLINE .WORD   0  
+ BRKPTS  .BLOCK  2*4
+ RETRIES .WORD   0
+-	.BLOCK  2*9
++PBLKARY .WORD	DSKARRAY	;POINTER TO DISK ARRAY
++	.BLOCK	2*8
+ LOTIME  .WORD   0  
+ HITIME  .WORD   0  
+ MSCNFO  .WORD   0000H           ; has xy addressing, has lowercase
+Only in /Users/jdykstra/em_disk_images/interp: moninc.text
+Only in /Users/jdykstra/em_disk_images/interp: monio.text
+diff -urbB z80_p-code_source/proc1.text /Users/jdykstra/em_disk_images/interp/proc1.text
+--- z80_p-code_source/proc1.text	2006-05-11 00:13:36.000000000 -0500
++++ /Users/jdykstra/em_disk_images/interp/proc1.text	2015-11-22 16:00:07.000000000 -0600
+@@ -6,6 +6,13 @@
+ 
+ ; Copyright (c) by Regents of the University of California, San Diego
+ 
++;			MODIFICATIONS
++;
++;	20 Feb 83 - Add procedure breakpoints for debugger
++;
++
++
++
+ ;***************************************************************;
+ ;            PROGRAM FLOW - JUMPS AND PROCEDURE CALLS           ;
+ ;***************************************************************;
+@@ -461,14 +468,56 @@
+ 
+ CLP     ; Call local procedure
+ 	CALL    BLDMSCW         ; Does everything for CLP
+-	JP      BACK
++	
++;	If the debugger is active, search the breakpoint table for the
++;	procedure we are about to enter.  Take a breakpoint fault if so.
++;
++;	Each entry in the breakpoint table is two bytes long.  In the
++;	original UCSD interpreter, there were only line-number breakpoints,
++;	and the line number was stored in the entry as an integer.
++;	In this extension of the breakpoint concept, the first (even)
++;	byte contains the procedure number, and the second (odd) contains
++;	the segment number, with bit 7 set to distinguish it from a
++;	line-number breakpoint.
++
++CALLEX	LD	A,(BUGSTA)		; ASSUME DEBUGGER STATE IS < 256
++	AND	A			; CHECK FOR ZERO
++	JP	Z,BACK			; CALL COMPLETED IF NO DEBUGGER
++  
++;	SEARCH THE BREAKPOINT TABLE FOR A MATCH WITH THE PROCEDURE 
++;	BEING CALLED.
++
++	SAVIPC
++	
++	LD	B,4			; NUMBER OF ENTRIES IN TABLE
++	LD	HL,BRKPTS		; START OF TABLE
++	
++$10	LD	DE,(JTAB)		; POINTER TO PROC'S JTAB
++	LD	A,(DE)			; GET PROC NUMBER FROM JTAB
++	CP	(HL)			; COMPARE TO FIRST BYTE OF TABLE ENTRY
++	INC	HL
++	JR	NZ,$20			; JUMP IF NO MATCH
++
++	LD	DE,(SEGP)		; POINTER TO SEGMENT TABLE
++	LD	A,(DE)			; GET SEGMENT NUMBER FROM SEGMENT TBL
++	OR	80H			; SET BIT 7 TO MATCH ENTRY
++	CP	(HL)			; COMPARE TO SECOND BYTE OF TABLE
++	JP	Z,BPTHLT		; TAKE BREAKPOINT IF MATCH
++	
++$20	INC	HL			; ADVANCE TABLE POINTER
++	DJNZ	$10			; LOOP FOR ALL ENTRIES
++	
++	JP	BACK1			; NO BREAKPOINT, SO CONTINUE
++  
++  
++  
+ 
+ CGP     ; Call global procedure
+ 	CALL    BLDMSCW
+ 	POP     HL      ; Junk stat pointer BLDMSCW gave us...
+ 	LD      HL,(BASE)
+ 	PUSH    HL              ; ... and make stat point to BASE
+-	JP      BACK
++	JR	CALLEX
+ 
+ CBP     ; Call base procedure
+ 	CALL    BLDMSCW         ; and then make this a BASE MSCW
+@@ -489,7 +538,7 @@
+ 	INC     HL
+ 	LD      (HL),B
+ 	POP     BC              ; get back IPC
+-	JP      BACK
++	JR	CALLEX
+ 
+ CIP     ; Call intermediate procedure
+ 	CALL    BLDMSCW         ; then try to point statlink at parent
+@@ -525,6 +574,13 @@
+ 	PUSH    BC      ; new msstat is the found mscw
+ 	LD      C,E     ; set up IPC again
+ 	LD      B,D
+-	JP      BACK
++	JP	CALLEX
++
++
++
++
++
++
++
+ 
+ 
