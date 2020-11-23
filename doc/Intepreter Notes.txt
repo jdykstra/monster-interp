@@ -14,6 +14,8 @@ The disk translation program for the emulated environment is warning that there 
 
 I compared my working copy of the interpreter against the BitSavers's copy, and the only differences are my modifications.       
 
+The Pascal compiler requires floating point support be built into the compiler.
+
 
 Disk I/O
 --------

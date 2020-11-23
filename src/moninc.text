@@ -6,7 +6,7 @@
 ;	12-Dec-81 - Change origin of interpreter and delete FP code.
 ;	09-Jan-82 - Use MONITOR I/O module
 ;	20 Feb 83 - Add procedure breakpoints for debugger
-;
+;	23-Nov-20 - Re-enable floating point but not transcendentals
 
 
 OFF	.EQU	0	       ; definitions for conditionals
@@ -27,16 +27,16 @@ NMS	.EQU	OFF
 
 ; Listing controls
 
-LISTINC .EQU	OFF	; List include file
+LISTINC .EQU	ON	; List include file
 LSTINT	.EQU	ON	 ; Interpreter main root section
-LSTVARS .EQU	OFF	; Variable loading, storing, moving, indexing
-LSTARIT .EQU	OFF	; Simple top-of-stack arithmetic and comparisons
-LSTSET	.EQU	OFF	; Set arithmetic and comparisons
-LSTFP	.EQU	OFF	; Basic floating point stuff
-LSTFPT	.EQU	OFF	; Transendental floating point routines
-LSTPROC .EQU	OFF	; Procedure calling, returning, segment loading,
+LSTVARS .EQU	ON	; Variable loading, storing, moving, indexing
+LSTARIT .EQU	ON	; Simple top-of-stack arithmetic and comparisons
+LSTSET	.EQU	ON	; Set arithmetic and comparisons
+LSTFP	.EQU	ON	; Basic floating point stuff
+LSTFPT	.EQU	ON	; Transendental floating point routines
+LSTPROC .EQU	ON	; Procedure calling, returning, segment loading,
 			 ;   unloading, relocation, and jumps
-LSTSTP	.EQU	OFF	; Standard procedure caller and misc. standard procs.
+LSTSTP	.EQU	ON	; Standard procedure caller and misc. standard procs.
 LSTIO	.EQU	ON	; Unit io and BIOS callers
 LSTBOOT .EQU	ON	; Pascal-level bootstrap
 
@@ -53,11 +53,11 @@ P_TRACE	.EQU	OFF	; Trace individual P-code instructions
 	.INCLUDE	SET1.TEXT
 	.INCLUDE	SET2.TEXT
 
-	;  .INCLUDE	   FPL.TEXT
-	;  .INCLUDE	   FPI.TEXT
-	.INCLUDE	NOFPI.TEXT
+	.INCLUDE	FPL.TEXT
+	.INCLUDE	FPI.TEXT
+	;  .INCLUDE	NOFPI.TEXT
 
-	;.INCLUDE	FPT.TEXT
+	;  .INCLUDE	FPT.TEXT
 	.INCLUDE	NOFPT.TEXT
 
 	.INCLUDE	PROC1.TEXT
