@@ -1,0 +1,5 @@
+dd if=/dev/zero of=../disk-images/LIST/listing.text count=4096
+
+ucsdpsys -w ../disk-images/BLDSYS/ -r src/ -w ../disk-images/LIST/ -b script_moninc
+
+dd if=../disk-images/BLDSYS/system.wrk.code of=HWSYS/system.micro skip=1 count=999

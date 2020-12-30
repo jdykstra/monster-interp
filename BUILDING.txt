@@ -1,4 +1,0 @@
-
-ucsdpsys -r interp/src -w pm_sys -b script_moninc
-
-dd if=pm_sys/system.wrk.code of=flsys/system.micro skip=1 count=999

@@ -1,0 +1,3 @@
+Each of the disk request blocks in the interpreter includes a two-byte field that is not part of the monitor data structure.  This was intended to be used for the sector size, but I don't think it is used any more.  It may have been replaced by code I added for the IDE drives that looks at the disk format code and deduces a sector size from that.  I don't know whether that code should be eliminated or whether the field should be.
+
+It should be fairly easy to provide a user abort key.  Add code to keyboard handler to recognize the keycode and set a flag in monitor's work area.  Add a monitor request to get and clear that flag.  Put code in the interpreter's main loop to check the flag, and then handle similarly to an I/O error or illegal opcode.
